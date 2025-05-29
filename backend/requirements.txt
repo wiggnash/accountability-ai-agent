@@ -1,0 +1,54 @@
+Django==5.2.1
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.4.0
+django-cors-headers==4.3.1
+python-decouple==3.8
+anthropic==0.52.1
+psycopg==3.2.1
+dj-database-url==2.1.0
+setuptools>=68.0.0
+# ===== FUTURE DEPENDENCIES (Uncomment when needed) =====
+
+# Task Queue & Background Jobs
+# celery==5.3.4
+# redis==5.0.1
+
+# Email Backend (for notifications)
+# django-anymail==10.2
+
+# API Documentation
+# drf-spectacular==0.26.5
+
+# Testing & Development
+# pytest==7.4.3
+# pytest-django==4.7.0
+# factory-boy==3.3.0
+
+# Production Server
+# gunicorn==21.2.0
+
+# Static Files & Media (for production)
+# whitenoise==6.6.0
+
+# Date/Time utilities
+# python-dateutil==2.8.2
+
+# HTTP requests (for external API calls)
+# requests==2.31.0
+
+# JSON Web Token utilities (already included in simplejwt)
+# PyJWT==2.8.0
+
+# Development Tools
+# django-debug-toolbar==4.2.0
+# django-extensions==3.2.3
+
+# Monitoring & Logging (for production)
+# sentry-sdk==1.38.0
+
+# File upload handling
+# Pillow==10.1.0
+
+# Social Authentication (future feature)
+# django-allauth==0.57.0
+# dj-rest-auth==5.0.2
