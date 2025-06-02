@@ -4,6 +4,6 @@ urlpatterns = [
     # Authentication routes
     path('auth/', include('authentication.urls')),
 
-    # Profile routes
-    # path('profiles/', include('profiles.urls')),
+    # Challenge routes
+    path('challenge-categories/', include('challenge_categories.urls')),
 ]
