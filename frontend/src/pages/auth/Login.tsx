@@ -1,6 +1,8 @@
+// src/pages/Login.tsx
 import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Eye, EyeOff, Mail, Lock, Zap } from "lucide-react";
-import { authAPI, setAuthData, type LoginData } from "@/utils/apiClient";
+import { useAuth } from "@/context/AuthContext";
 
 interface LoginFormData {
   email: string;
@@ -15,18 +17,21 @@ interface FormErrors {
 }
 
 const LoginPage: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { login, isLoading } = useAuth();
+
   const [formData, setFormData] = useState<LoginFormData>({
     email: "",
     password: "",
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [rememberMe, setRememberMe] = useState(false);
 
   // Check for URL parameters (registration success, etc.)
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
+    const urlParams = new URLSearchParams(location.search);
     if (urlParams.get("registered") === "success") {
       setErrors({
         success:
@@ -39,7 +44,7 @@ const LoginPage: React.FC = () => {
           "Please check your email to verify your account before logging in.",
       });
     }
-  }, []);
+  }, [location.search]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -80,30 +85,15 @@ const LoginPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setErrors({});
 
     if (!validateForm()) {
-      setIsLoading(false);
       return;
     }
 
     try {
-      // Prepare login data
-      const loginData: LoginData = {
-        username_or_email: formData.email,
-        password: formData.password,
-      };
-
-      console.log("Attempting login with:", { email: formData.email });
-
-      // Make API call
-      const response = await authAPI.login(loginData);
-
-      console.log("Login successful:", response);
-
-      // Store authentication data
-      setAuthData(response);
+      // Use the login function from AuthContext
+      await login(formData.email, formData.password);
 
       // Handle "Remember Me" - in a real app, you might want to use secure httpOnly cookies
       if (rememberMe) {
@@ -115,12 +105,12 @@ const LoginPage: React.FC = () => {
       // Show success message briefly before redirect
       setErrors({ success: "Login successful! Redirecting..." });
 
+      // Get redirect path from location state or default to dashboard
+      const from = location.state?.from?.pathname || "/dashboard";
+
       // Redirect after a short delay to show success message
       setTimeout(() => {
-        const redirectTo =
-          new URLSearchParams(window.location.search).get("redirect") ||
-          "/dashboard";
-        window.location.href = redirectTo;
+        navigate(from, { replace: true });
       }, 1000);
     } catch (error: any) {
       console.error("Login error:", error);
@@ -156,13 +146,11 @@ const LoginPage: React.FC = () => {
           general: error.message || "Login failed. Please try again.",
         });
       }
-    } finally {
-      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-start justify-center p-4 pt-16">
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-blue-100/30 rounded-full blur-3xl"></div>
@@ -375,12 +363,12 @@ const LoginPage: React.FC = () => {
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
               Don't have an account?{" "}
-              <a
-                href="/register"
+              <button
+                onClick={() => navigate("/register")}
                 className="font-medium text-blue-600 hover:text-blue-500 transition-colors duration-200"
               >
                 Create an account
-              </a>
+              </button>
             </p>
           </div>
         </div>

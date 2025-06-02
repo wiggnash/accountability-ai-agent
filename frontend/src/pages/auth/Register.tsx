@@ -1,6 +1,8 @@
+// src/pages/Register.tsx
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Mail, Lock, User, Zap } from "lucide-react";
-import { authAPI, setAuthData, type RegisterData } from "@/utils/apiClient";
+import { useAuth } from "@/context/AuthContext";
 
 interface RegisterFormData {
   fullName: string;
@@ -23,6 +25,9 @@ interface FormErrors {
 }
 
 const RegisterPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { register, isLoading } = useAuth();
+
   const [formData, setFormData] = useState<RegisterFormData>({
     fullName: "",
     username: "",
@@ -33,8 +38,9 @@ const RegisterPage: React.FC = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [isUsernameManuallyEdited, setIsUsernameManuallyEdited] =
+    useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -58,10 +64,6 @@ const RegisterPage: React.FC = () => {
     }
   };
 
-  // Track if username was manually edited
-  const [isUsernameManuallyEdited, setIsUsernameManuallyEdited] =
-    useState(false);
-
   // Auto-generate username from full name
   const generateUsername = (fullName: string): string => {
     if (!fullName.trim()) return "";
@@ -78,7 +80,6 @@ const RegisterPage: React.FC = () => {
   React.useEffect(() => {
     if (!isUsernameManuallyEdited) {
       const generatedUsername = generateUsername(formData.fullName);
-      console.log("Auto Generated Username:", generatedUsername);
       setFormData((prev) => ({
         ...prev,
         username: generatedUsername,
@@ -142,11 +143,9 @@ const RegisterPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setErrors({});
 
     if (!validateForm()) {
-      setIsLoading(false);
       return;
     }
 
@@ -154,51 +153,24 @@ const RegisterPage: React.FC = () => {
       // Split full name into first and last name
       const nameParts = formData.fullName.trim().split(" ");
       const firstName = nameParts[0];
-      const lastName = nameParts.slice(1).join(" ") || firstName; // Use first name as last name if no last name provided
+      const lastName = nameParts.slice(1).join(" ") || firstName;
 
-      // Prepare registration data according to backend expectation
-      const registrationData: RegisterData = {
-        username: formData.username.trim(),
-        email: formData.email.trim().toLowerCase(),
-        password: formData.password,
-        password_confirm: formData.confirmPassword, // Backend requires this field
-        first_name: firstName,
-        last_name: lastName,
-      };
+      // Use the register function from AuthContext
+      await register(
+        `${firstName} ${lastName}`, // Full name
+        formData.email.trim().toLowerCase(),
+        formData.password,
+      );
 
-      console.log("Attempting registration with:", {
-        username: registrationData.username,
-        email: registrationData.email,
-        first_name: registrationData.first_name,
-        last_name: registrationData.last_name,
+      // Show success message
+      setErrors({
+        success: "Account created successfully! Redirecting to dashboard...",
       });
 
-      // Make API call
-      const response = await authAPI.register(registrationData);
-
-      console.log("Registration successful:", response);
-
-      // Check if backend auto-logs in the user (returns tokens)
-      if (response.access && response.refresh) {
-        // Auto-login: store tokens and redirect
-        setAuthData(response);
-        setErrors({
-          success: "Account created successfully! Redirecting to dashboard...",
-        });
-
-        setTimeout(() => {
-          window.location.href = "/dashboard";
-        }, 1500);
-      } else {
-        // Redirect to login with success message
-        setErrors({
-          success: "Account created successfully! Redirecting to login...",
-        });
-
-        setTimeout(() => {
-          window.location.href = "/login?registered=success";
-        }, 2000);
-      }
+      // Redirect to dashboard after a short delay
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 1500);
     } catch (error: any) {
       console.error("Registration error:", error);
 
@@ -255,13 +227,11 @@ const RegisterPage: React.FC = () => {
           general: error.message || "Registration failed. Please try again.",
         });
       }
-    } finally {
-      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-start justify-center p-4 py-8">
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-blue-100/30 rounded-full blur-3xl"></div>
@@ -271,19 +241,19 @@ const RegisterPage: React.FC = () => {
       {/* Main register card */}
       <div className="w-full max-w-md relative">
         {/* Logo and header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-6 shadow-lg">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4 shadow-lg">
             <Zap className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 mb-1">
             Create your account
           </h1>
           <p className="text-gray-600">Start your learning journey today</p>
         </div>
 
         {/* Register form card */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-white/20">
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 border border-white/20">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {/* Success Message */}
             {errors.success && (
               <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl flex items-center">
@@ -627,12 +597,12 @@ const RegisterPage: React.FC = () => {
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
               Already have an account?{" "}
-              <a
-                href="/login"
+              <button
+                onClick={() => navigate("/login")}
                 className="font-medium text-blue-600 hover:text-blue-500 transition-colors duration-200"
               >
                 Sign in
-              </a>
+              </button>
             </p>
           </div>
         </div>
