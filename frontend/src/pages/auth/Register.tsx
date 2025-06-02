@@ -1,82 +1,263 @@
 import React, { useState } from "react";
 import { Eye, EyeOff, Mail, Lock, User, Zap } from "lucide-react";
+import { authAPI, setAuthData, type RegisterData } from "@/utils/apiClient";
 
-const RegisterPage = () => {
-  const [formData, setFormData] = useState({
+interface RegisterFormData {
+  fullName: string;
+  username: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  agreeTerms: boolean;
+}
+
+interface FormErrors {
+  fullName?: string;
+  username?: string;
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+  agreeTerms?: string;
+  general?: string;
+  success?: string;
+}
+
+const RegisterPage: React.FC = () => {
+  const [formData, setFormData] = useState<RegisterFormData>({
     fullName: "",
+    username: "",
     email: "",
     password: "",
     confirmPassword: "",
+    agreeTerms: false,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<FormErrors>({});
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+
+    // Track if username is being manually edited
+    if (name === "username") {
+      setIsUsernameManuallyEdited(true);
+    }
+
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: type === "checkbox" ? checked : value,
     }));
-    // Clear error when user starts typing
-    if (errors[name]) {
+
+    // Clear field-specific error when user starts typing
+    if (errors[name as keyof FormErrors]) {
       setErrors((prev) => ({
         ...prev,
-        [name]: "",
+        [name]: undefined,
       }));
     }
   };
 
-  const validateForm = () => {
-    const newErrors = {};
+  // Track if username was manually edited
+  const [isUsernameManuallyEdited, setIsUsernameManuallyEdited] =
+    useState(false);
 
+  // Auto-generate username from full name
+  const generateUsername = (fullName: string): string => {
+    if (!fullName.trim()) return "";
+
+    return fullName
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "") // Remove spaces
+      .replace(/[^a-z0-9]/g, "") // Remove special characters
+      .substring(0, 20); // Limit length
+  };
+
+  // Update username when full name changes (only if not manually edited)
+  React.useEffect(() => {
+    if (!isUsernameManuallyEdited) {
+      const generatedUsername = generateUsername(formData.fullName);
+      console.log("Auto Generated Username:", generatedUsername);
+      setFormData((prev) => ({
+        ...prev,
+        username: generatedUsername,
+      }));
+    }
+  }, [formData.fullName, isUsernameManuallyEdited]);
+
+  const validateForm = (): boolean => {
+    const newErrors: FormErrors = {};
+
+    // Full name validation
     if (!formData.fullName.trim()) {
       newErrors.fullName = "Full name is required";
+    } else if (formData.fullName.trim().length < 2) {
+      newErrors.fullName = "Full name must be at least 2 characters";
     }
 
-    if (!formData.email) {
+    // Username validation
+    if (!formData.username.trim()) {
+      newErrors.username = "Username is required";
+    } else if (formData.username.length < 3) {
+      newErrors.username = "Username must be at least 3 characters";
+    } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+      newErrors.username =
+        "Username can only contain letters, numbers, and underscores";
+    }
+
+    // Email validation
+    if (!formData.email.trim()) {
       newErrors.email = "Email is required";
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "Please enter a valid email address";
     }
 
+    // Password validation
     if (!formData.password) {
       newErrors.password = "Password is required";
-    } else if (formData.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
+    } else if (formData.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters";
+    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+      newErrors.password =
+        "Password must contain at least one uppercase letter, one lowercase letter, and one number";
     }
 
+    // Confirm password validation
     if (!formData.confirmPassword) {
       newErrors.confirmPassword = "Please confirm your password";
     } else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Passwords do not match";
     }
 
-    return newErrors;
+    // Terms agreement validation
+    if (!formData.agreeTerms) {
+      newErrors.agreeTerms =
+        "You must agree to the Terms of Service and Privacy Policy";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setErrors({});
 
-    const newErrors = validateForm();
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    if (!validateForm()) {
       setIsLoading(false);
       return;
     }
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      console.log("Registration attempt:", {
-        fullName: formData.fullName,
-        email: formData.email,
+    try {
+      // Split full name into first and last name
+      const nameParts = formData.fullName.trim().split(" ");
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(" ") || firstName; // Use first name as last name if no last name provided
+
+      // Prepare registration data according to backend expectation
+      const registrationData: RegisterData = {
+        username: formData.username.trim(),
+        email: formData.email.trim().toLowerCase(),
         password: formData.password,
+        password_confirm: formData.confirmPassword, // Backend requires this field
+        first_name: firstName,
+        last_name: lastName,
+      };
+
+      console.log("Attempting registration with:", {
+        username: registrationData.username,
+        email: registrationData.email,
+        first_name: registrationData.first_name,
+        last_name: registrationData.last_name,
       });
-    }, 2000);
+
+      // Make API call
+      const response = await authAPI.register(registrationData);
+
+      console.log("Registration successful:", response);
+
+      // Check if backend auto-logs in the user (returns tokens)
+      if (response.access && response.refresh) {
+        // Auto-login: store tokens and redirect
+        setAuthData(response);
+        setErrors({
+          success: "Account created successfully! Redirecting to dashboard...",
+        });
+
+        setTimeout(() => {
+          window.location.href = "/dashboard";
+        }, 1500);
+      } else {
+        // Redirect to login with success message
+        setErrors({
+          success: "Account created successfully! Redirecting to login...",
+        });
+
+        setTimeout(() => {
+          window.location.href = "/login?registered=success";
+        }, 2000);
+      }
+    } catch (error: any) {
+      console.error("Registration error:", error);
+
+      // Handle specific error types
+      const errorMessage = error.message.toLowerCase();
+
+      if (
+        errorMessage.includes("username") &&
+        errorMessage.includes("already")
+      ) {
+        setErrors({
+          username:
+            "This username is already taken. Please choose another one.",
+        });
+      } else if (
+        errorMessage.includes("email") &&
+        errorMessage.includes("already")
+      ) {
+        setErrors({
+          email:
+            "An account with this email already exists. Try logging in instead.",
+        });
+      } else if (
+        errorMessage.includes("password") &&
+        errorMessage.includes("common")
+      ) {
+        setErrors({
+          password:
+            "This password is too common. Please choose a stronger password.",
+        });
+      } else if (errorMessage.includes("password")) {
+        setErrors({ password: error.message });
+      } else if (errorMessage.includes("username")) {
+        setErrors({ username: error.message });
+      } else if (errorMessage.includes("email")) {
+        setErrors({ email: error.message });
+      } else if (
+        errorMessage.includes("first_name") ||
+        errorMessage.includes("first name")
+      ) {
+        setErrors({ fullName: "Please provide a valid first name" });
+      } else if (
+        errorMessage.includes("last_name") ||
+        errorMessage.includes("last name")
+      ) {
+        setErrors({ fullName: "Please provide a valid last name" });
+      } else if (errorMessage.includes("network error")) {
+        setErrors({
+          general:
+            "Unable to connect to the server. Please check your internet connection.",
+        });
+      } else {
+        setErrors({
+          general: error.message || "Registration failed. Please try again.",
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -102,7 +283,43 @@ const RegisterPage = () => {
 
         {/* Register form card */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-white/20">
-          <div className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Success Message */}
+            {errors.success && (
+              <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl flex items-center">
+                <svg
+                  className="w-5 h-5 mr-3 flex-shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                {errors.success}
+              </div>
+            )}
+
+            {/* General Error Message */}
+            {errors.general && (
+              <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center">
+                <svg
+                  className="w-5 h-5 mr-3 flex-shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                {errors.general}
+              </div>
+            )}
+
             {/* Full Name field */}
             <div>
               <label
@@ -135,6 +352,65 @@ const RegisterPage = () => {
               {errors.fullName && (
                 <p className="mt-2 text-sm text-red-600">{errors.fullName}</p>
               )}
+            </div>
+
+            {/* Username field */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label
+                  htmlFor="username"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Username
+                </label>
+                {isUsernameManuallyEdited && formData.fullName && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUsernameManuallyEdited(false);
+                      const generatedUsername = generateUsername(
+                        formData.fullName,
+                      );
+                      setFormData((prev) => ({
+                        ...prev,
+                        username: generatedUsername,
+                      }));
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-500 font-medium"
+                  >
+                    Reset to auto
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <User className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  required
+                  value={formData.username}
+                  onChange={handleInputChange}
+                  className={`
+                    block w-full pl-10 pr-3 py-3 border rounded-xl
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                    transition-all duration-200 bg-gray-50/50
+                    ${errors.username ? "border-red-300 bg-red-50/50" : "border-gray-200 hover:border-gray-300"}
+                  `}
+                  placeholder="Choose a username"
+                />
+              </div>
+              {errors.username && (
+                <p className="mt-2 text-sm text-red-600">{errors.username}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                {isUsernameManuallyEdited
+                  ? "Only letters, numbers, and underscores allowed"
+                  : "Auto-generated from your name (you can edit this)"}
+              </p>
             </div>
 
             {/* Email field */}
@@ -197,7 +473,7 @@ const RegisterPage = () => {
                     transition-all duration-200 bg-gray-50/50
                     ${errors.password ? "border-red-300 bg-red-50/50" : "border-gray-200 hover:border-gray-300"}
                   `}
-                  placeholder="Create a password"
+                  placeholder="Create a strong password"
                 />
                 <button
                   type="button"
@@ -205,15 +481,18 @@ const RegisterPage = () => {
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
                   ) : (
-                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
                   )}
                 </button>
               </div>
               {errors.password && (
                 <p className="mt-2 text-sm text-red-600">{errors.password}</p>
               )}
+              <p className="mt-1 text-xs text-gray-500">
+                Must be 8+ characters with uppercase, lowercase, and number
+              </p>
             </div>
 
             {/* Confirm Password field */}
@@ -250,9 +529,9 @@ const RegisterPage = () => {
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 >
                   {showConfirmPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
                   ) : (
-                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
                   )}
                 </button>
               </div>
@@ -267,37 +546,41 @@ const RegisterPage = () => {
             <div className="flex items-start">
               <div className="flex items-center h-5">
                 <input
-                  id="terms"
-                  name="terms"
+                  id="agreeTerms"
+                  name="agreeTerms"
                   type="checkbox"
                   required
+                  checked={formData.agreeTerms}
+                  onChange={handleInputChange}
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
               </div>
               <div className="ml-3 text-sm">
-                <label htmlFor="terms" className="text-gray-700">
+                <label htmlFor="agreeTerms" className="text-gray-700">
                   I agree to the{" "}
                   <button
                     type="button"
-                    className="text-blue-600 hover:text-blue-500 font-medium"
+                    className="text-blue-600 hover:text-blue-500 font-medium transition-colors"
                   >
                     Terms of Service
                   </button>{" "}
                   and{" "}
                   <button
                     type="button"
-                    className="text-blue-600 hover:text-blue-500 font-medium"
+                    className="text-blue-600 hover:text-blue-500 font-medium transition-colors"
                   >
                     Privacy Policy
                   </button>
                 </label>
               </div>
             </div>
+            {errors.agreeTerms && (
+              <p className="text-sm text-red-600">{errors.agreeTerms}</p>
+            )}
 
             {/* Register button */}
             <button
-              type="button"
-              onClick={handleSubmit}
+              type="submit"
               disabled={isLoading}
               className={`
                 w-full flex justify-center py-3 px-4 border border-transparent rounded-xl
@@ -338,15 +621,18 @@ const RegisterPage = () => {
                 "Create account"
               )}
             </button>
-          </div>
+          </form>
 
           {/* Login link */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
               Already have an account?{" "}
-              <button className="font-medium text-blue-600 hover:text-blue-500 transition-colors duration-200">
+              <a
+                href="/login"
+                className="font-medium text-blue-600 hover:text-blue-500 transition-colors duration-200"
+              >
                 Sign in
-              </button>
+              </a>
             </p>
           </div>
         </div>

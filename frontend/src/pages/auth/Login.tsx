@@ -1,50 +1,164 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Eye, EyeOff, Mail, Lock, Zap } from "lucide-react";
+import { authAPI, setAuthData, type LoginData } from "@/utils/apiClient";
 
-const LoginPage = () => {
-  const [formData, setFormData] = useState({
+interface LoginFormData {
+  email: string;
+  password: string;
+}
+
+interface FormErrors {
+  email?: string;
+  password?: string;
+  general?: string;
+  success?: string;
+}
+
+const LoginPage: React.FC = () => {
+  const [formData, setFormData] = useState<LoginFormData>({
     email: "",
     password: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [rememberMe, setRememberMe] = useState(false);
 
-  const handleInputChange = (e) => {
+  // Check for URL parameters (registration success, etc.)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("registered") === "success") {
+      setErrors({
+        success:
+          "Registration successful! Please log in with your credentials.",
+      });
+    }
+    if (urlParams.get("verification") === "pending") {
+      setErrors({
+        success:
+          "Please check your email to verify your account before logging in.",
+      });
+    }
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
-    // Clear error when user starts typing
-    if (errors[name]) {
+
+    // Clear field-specific error when user starts typing
+    if (errors[name as keyof FormErrors]) {
       setErrors((prev) => ({
         ...prev,
-        [name]: "",
+        [name]: undefined,
       }));
     }
   };
 
-  const handleSubmit = async (e) => {
+  const validateForm = (): boolean => {
+    const newErrors: FormErrors = {};
+
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
+    } else {
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        newErrors.email = "Please enter a valid email address";
+      }
+    }
+
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setErrors({});
 
-    // Basic validation
-    const newErrors = {};
-    if (!formData.email) newErrors.email = "Email is required";
-    if (!formData.password) newErrors.password = "Password is required";
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    if (!validateForm()) {
       setIsLoading(false);
       return;
     }
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // Prepare login data
+      const loginData: LoginData = {
+        username_or_email: formData.email,
+        password: formData.password,
+      };
+
+      console.log("Attempting login with:", { email: formData.email });
+
+      // Make API call
+      const response = await authAPI.login(loginData);
+
+      console.log("Login successful:", response);
+
+      // Store authentication data
+      setAuthData(response);
+
+      // Handle "Remember Me" - in a real app, you might want to use secure httpOnly cookies
+      if (rememberMe) {
+        localStorage.setItem("rememberMe", "true");
+      } else {
+        localStorage.removeItem("rememberMe");
+      }
+
+      // Show success message briefly before redirect
+      setErrors({ success: "Login successful! Redirecting..." });
+
+      // Redirect after a short delay to show success message
+      setTimeout(() => {
+        const redirectTo =
+          new URLSearchParams(window.location.search).get("redirect") ||
+          "/dashboard";
+        window.location.href = redirectTo;
+      }, 1000);
+    } catch (error: any) {
+      console.error("Login error:", error);
+
+      // Handle specific error types
+      const errorMessage = error.message.toLowerCase();
+
+      if (
+        errorMessage.includes("invalid credentials") ||
+        errorMessage.includes("unable to log in") ||
+        errorMessage.includes("no active account")
+      ) {
+        setErrors({
+          general:
+            "Invalid email or password. Please check your credentials and try again.",
+        });
+      } else if (errorMessage.includes("network error")) {
+        setErrors({
+          general:
+            "Unable to connect to the server. Please check your internet connection.",
+        });
+      } else if (errorMessage.includes("account is not active")) {
+        setErrors({
+          general:
+            "Your account is not active. Please contact support or verify your email.",
+        });
+      } else if (errorMessage.includes("email")) {
+        setErrors({ email: error.message });
+      } else if (errorMessage.includes("password")) {
+        setErrors({ password: error.message });
+      } else {
+        setErrors({
+          general: error.message || "Login failed. Please try again.",
+        });
+      }
+    } finally {
       setIsLoading(false);
-      console.log("Login attempt:", formData);
-    }, 1500);
+    }
   };
 
   return (
@@ -70,7 +184,43 @@ const LoginPage = () => {
 
         {/* Login form card */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-white/20">
-          <div className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Success Message */}
+            {errors.success && (
+              <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl flex items-center">
+                <svg
+                  className="w-5 h-5 mr-3 flex-shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                {errors.success}
+              </div>
+            )}
+
+            {/* General Error Message */}
+            {errors.general && (
+              <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center">
+                <svg
+                  className="w-5 h-5 mr-3 flex-shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                {errors.general}
+              </div>
+            )}
+
             {/* Email field */}
             <div>
               <label
@@ -139,9 +289,9 @@ const LoginPage = () => {
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
                   ) : (
-                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
                   )}
                 </button>
               </div>
@@ -157,6 +307,8 @@ const LoginPage = () => {
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
                 <label
@@ -168,7 +320,7 @@ const LoginPage = () => {
               </div>
               <button
                 type="button"
-                className="text-sm text-blue-600 hover:text-blue-500 font-medium"
+                className="text-sm text-blue-600 hover:text-blue-500 font-medium transition-colors duration-200"
               >
                 Forgot password?
               </button>
@@ -176,8 +328,7 @@ const LoginPage = () => {
 
             {/* Login button */}
             <button
-              type="button"
-              onClick={handleSubmit}
+              type="submit"
               disabled={isLoading}
               className={`
                 w-full flex justify-center py-3 px-4 border border-transparent rounded-xl
@@ -218,15 +369,18 @@ const LoginPage = () => {
                 "Sign in"
               )}
             </button>
-          </div>
+          </form>
 
           {/* Register link */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
               Don't have an account?{" "}
-              <button className="font-medium text-blue-600 hover:text-blue-500 transition-colors duration-200">
+              <a
+                href="/register"
+                className="font-medium text-blue-600 hover:text-blue-500 transition-colors duration-200"
+              >
                 Create an account
-              </button>
+              </a>
             </p>
           </div>
         </div>
@@ -235,11 +389,11 @@ const LoginPage = () => {
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-500">
             By signing in, you agree to our{" "}
-            <button className="text-blue-600 hover:text-blue-500">
+            <button className="text-blue-600 hover:text-blue-500 transition-colors duration-200">
               Terms of Service
             </button>{" "}
             and{" "}
-            <button className="text-blue-600 hover:text-blue-500">
+            <button className="text-blue-600 hover:text-blue-500 transition-colors duration-200">
               Privacy Policy
             </button>
           </p>
