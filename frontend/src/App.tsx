@@ -11,7 +11,7 @@ import { useAuth } from "./context/AuthContext";
 
 import LoginPage from "./pages/auth/Login";
 import RegisterPage from "./pages/auth/Register";
-
+import Challenges from "./pages/Challenges";
 import { AuthProvider } from "./context/AuthContext";
 
 // Protected Route Component
@@ -198,8 +198,8 @@ const AppRouter: React.FC = () => {
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<TemporaryHome />} />
-          {/* <Route path="/challenges" element={<Challenges />} />
-          <Route path="/challenge/:slug" element={<ChallengeDetails />} /> */}
+          <Route path="/challenges" element={<Challenges />} />
+          {/* <Route path="/challenge/:slug" element={<ChallengeDetails />} /> */}
 
           {/* Auth Routes (redirect to dashboard if logged in) */}
           <Route
